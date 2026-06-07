@@ -100,22 +100,32 @@ exports.saveOffer = async (req, res) => {
       return res.status(403).json({ error: "Only tutor can start the class" });
     }
 
-    session.offer = req.body.offer;
-    session.answer = undefined;
-    session.candidates = [];
-    session.status = "waiting";
-    session.startedAt = session.startedAt || new Date();
-    await session.save();
+    const updatedSession = await ClassSession.findOneAndUpdate(
+      { _id: session._id, tutor: req.user.id },
+      {
+        $set: {
+          offer: req.body.offer,
+          candidates: [],
+          status: "waiting",
+          startedAt: session.startedAt || new Date(),
+        },
+        $unset: { answer: "" },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!updatedSession) {
+      return res.status(404).json({ error: "Class session not found" });
+    }
 
     await createNotification(req.app.get("io"), {
-      user: session.student,
+      user: updatedSession.student,
       tab: "sessions",
       title: "Class started",
       body: "Your tutor has started the live class.",
-      refId: session._id,
+      refId: updatedSession._id,
     });
 
-    res.status(200).json({ message: "Offer saved", session });
+    res.status(200).json({ message: "Offer saved", session: updatedSession });
   } catch (err) {
     console.error("Save Offer Error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -136,11 +146,16 @@ exports.saveAnswer = async (req, res) => {
       return res.status(400).json({ error: "Tutor has not started this class yet" });
     }
 
-    session.answer = req.body.answer;
-    session.status = "live";
-    await session.save();
+    const updatedSession = await ClassSession.findOneAndUpdate(
+      { _id: session._id, student: req.user.id, offer: { $exists: true, $ne: null } },
+      { $set: { answer: req.body.answer, status: "live" } },
+      { new: true, runValidators: true },
+    );
+    if (!updatedSession) {
+      return res.status(400).json({ error: "Tutor has not started this class yet" });
+    }
 
-    res.status(200).json({ message: "Answer saved", session });
+    res.status(200).json({ message: "Answer saved", session: updatedSession });
   } catch (err) {
     console.error("Save Answer Error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -156,11 +171,18 @@ exports.addCandidate = async (req, res) => {
     if (error) return res.status(error.status).json({ error: error.message });
 
     if (req.body.candidate) {
-      session.candidates.push({
-        sender: req.user.id,
-        candidate: req.body.candidate,
-      });
-      await session.save();
+      await ClassSession.updateOne(
+        { _id: session._id },
+        {
+          $push: {
+            candidates: {
+              sender: req.user.id,
+              candidate: req.body.candidate,
+            },
+          },
+        },
+        { runValidators: true },
+      );
     }
 
     res.status(200).json({ message: "Candidate saved" });
@@ -180,7 +202,14 @@ exports.endClassSession = async (req, res) => {
 
     session.status = "ended";
     session.endedAt = new Date();
-    await session.save();
+    const updatedSession = await ClassSession.findByIdAndUpdate(
+      session._id,
+      { $set: { status: "ended", endedAt: session.endedAt } },
+      { new: true, runValidators: true },
+    );
+    if (!updatedSession) {
+      return res.status(404).json({ error: "Class session not found" });
+    }
 
     const receiver =
       String(session.student) === String(req.user.id) ? session.tutor : session.student;
@@ -192,7 +221,7 @@ exports.endClassSession = async (req, res) => {
       refId: session._id,
     });
 
-    res.status(200).json({ message: "Class ended", session });
+    res.status(200).json({ message: "Class ended", session: updatedSession });
   } catch (err) {
     console.error("End Class Session Error:", err);
     res.status(500).json({ error: "Internal server error" });
