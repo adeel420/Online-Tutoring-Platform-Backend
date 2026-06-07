@@ -1,6 +1,7 @@
 const Booking = require("../models/bookingModel");
 const ClassSession = require("../models/classSessionModel");
 const { createNotification } = require("../utils/notifications");
+const { getBookingWindowStatus } = require("../utils/sessionTime");
 
 const populateSession = (query) =>
   query
@@ -28,6 +29,32 @@ const requireClassParticipant = async (sessionId, userId) => {
   return { session };
 };
 
+const completeBooking = async (bookingId) => {
+  if (!bookingId) return;
+  await Booking.updateOne(
+    { _id: bookingId, status: { $ne: "completed" } },
+    { $set: { status: "completed" } },
+  );
+};
+
+const endExpiredSession = async (session) => {
+  const booking = session.booking?._id ? session.booking : await Booking.findById(session.booking);
+  if (!booking) return { expired: false };
+
+  const windowStatus = getBookingWindowStatus(booking);
+  if (windowStatus.state !== "expired") return { expired: false, booking };
+
+  const endedAt = new Date();
+  const updatedSession = await ClassSession.findByIdAndUpdate(
+    session._id,
+    { $set: { status: "ended", endedAt } },
+    { new: true, runValidators: true },
+  );
+  await completeBooking(booking._id);
+
+  return { expired: true, session: updatedSession, booking };
+};
+
 exports.createOrGetClassSession = async (req, res) => {
   try {
     const { bookingId } = req.params;
@@ -39,6 +66,18 @@ exports.createOrGetClassSession = async (req, res) => {
     }
     if (booking.paymentStatus !== "paid" || booking.status === "pending_payment") {
       return res.status(400).json({ error: "Payment is required before class starts" });
+    }
+    if (booking.status === "completed" || booking.status === "cancelled") {
+      return res.status(400).json({ error: "This class is no longer available" });
+    }
+
+    const windowStatus = getBookingWindowStatus(booking);
+    if (windowStatus.state === "expired") {
+      await completeBooking(booking._id);
+      return res.status(400).json({ error: windowStatus.message });
+    }
+    if (windowStatus.state !== "open") {
+      return res.status(400).json({ error: windowStatus.message });
     }
 
     const session = await ClassSession.findOneAndUpdate(
@@ -81,7 +120,10 @@ exports.getClassSession = async (req, res) => {
     );
     if (error) return res.status(error.status).json({ error: error.message });
 
-    const populated = await populateSession(ClassSession.findById(session._id));
+    const expired = await endExpiredSession(session);
+    const populated = await populateSession(
+      ClassSession.findById(expired.session?._id || session._id),
+    );
     res.status(200).json(populated);
   } catch (err) {
     console.error("Get Class Session Error:", err);
@@ -98,6 +140,20 @@ exports.saveOffer = async (req, res) => {
     if (error) return res.status(error.status).json({ error: error.message });
     if (String(session.tutor) !== String(req.user.id)) {
       return res.status(403).json({ error: "Only tutor can start the class" });
+    }
+    const booking = await Booking.findById(session.booking);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    const windowStatus = getBookingWindowStatus(booking);
+    if (windowStatus.state === "expired") {
+      await completeBooking(booking._id);
+      await ClassSession.updateOne(
+        { _id: session._id },
+        { $set: { status: "ended", endedAt: new Date() } },
+      );
+      return res.status(400).json({ error: windowStatus.message });
+    }
+    if (windowStatus.state !== "open") {
+      return res.status(400).json({ error: windowStatus.message });
     }
 
     const updatedSession = await ClassSession.findOneAndUpdate(
@@ -145,6 +201,10 @@ exports.saveAnswer = async (req, res) => {
     if (!session.offer) {
       return res.status(400).json({ error: "Tutor has not started this class yet" });
     }
+    const expired = await endExpiredSession(session);
+    if (expired.expired) {
+      return res.status(400).json({ error: "This class time has ended." });
+    }
 
     const updatedSession = await ClassSession.findOneAndUpdate(
       { _id: session._id, student: req.user.id, offer: { $exists: true, $ne: null } },
@@ -169,6 +229,10 @@ exports.addCandidate = async (req, res) => {
       req.user.id,
     );
     if (error) return res.status(error.status).json({ error: error.message });
+    const expired = await endExpiredSession(session);
+    if (expired.expired) {
+      return res.status(400).json({ error: "This class time has ended." });
+    }
 
     if (req.body.candidate) {
       await ClassSession.updateOne(
@@ -210,6 +274,7 @@ exports.endClassSession = async (req, res) => {
     if (!updatedSession) {
       return res.status(404).json({ error: "Class session not found" });
     }
+    await completeBooking(session.booking);
 
     const receiver =
       String(session.student) === String(req.user.id) ? session.tutor : session.student;

@@ -1,6 +1,7 @@
 const Booking = require("../models/bookingModel");
 const Message = require("../models/messageModel");
 const Notification = require("../models/notificationModel");
+const { formatTimeRange12 } = require("../utils/sessionTime");
 
 exports.getConversations = async (req, res) => {
   try {
@@ -24,7 +25,7 @@ exports.getConversations = async (req, res) => {
         profile: peer.profile,
         subject: booking.subject,
         day: booking.day,
-        time: `${booking.from} - ${booking.to}`,
+        time: formatTimeRange12(booking.from, booking.to),
       };
     });
 

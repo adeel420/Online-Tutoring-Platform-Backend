@@ -11,6 +11,7 @@ const {
 } = require("../middleware/email");
 const { generateToken } = require("../middleware/jwt");
 const { createJazzCashPayload } = require("./paymentController");
+const { formatTimeRange12 } = require("../utils/sessionTime");
 
 const parseAmount = (rate = "") => {
   const amount = Number(String(rate).replace(/[^0-9.]/g, ""));
@@ -28,7 +29,7 @@ const formatBooking = (booking) => ({
   subject: booking.subject,
   date: booking.day,
   day: booking.day,
-  time: `${booking.from} - ${booking.to}`,
+  time: formatTimeRange12(booking.from, booking.to),
   from: booking.from,
   to: booking.to,
   duration: "1 session",
