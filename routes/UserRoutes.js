@@ -7,6 +7,7 @@ const {
   reset,
   loginData,
   updateAdminProfile,
+  updateStudentProfile,
   updateTutorProfile,
   updateTutorAvailability,
   getPublicTutors,
@@ -35,6 +36,7 @@ router.post("/verify-email", verify);
 router.post("/forget-password", forgot);
 router.put("/reset-password", reset);
 router.get("/login-detail", jwtAuthMiddleware, loginData);
+router.put("/student/profile", jwtAuthMiddleware, upload.single("profile"), updateStudentProfile);
 router.put("/admin/profile", jwtAuthMiddleware, upload.single("profile"), updateAdminProfile);
 router.put("/tutor/profile", jwtAuthMiddleware, upload.single("profile"), updateTutorProfile);
 router.put("/tutor/availability", jwtAuthMiddleware, updateTutorAvailability);

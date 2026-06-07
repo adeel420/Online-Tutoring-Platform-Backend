@@ -391,6 +391,38 @@ exports.updateAdminProfile = async (req, res) => {
   }
 };
 
+exports.updateStudentProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.role !== "student") {
+      return res.status(403).json({ error: "Only students can update student profile" });
+    }
+
+    ["name", "phone", "qualification", "location", "bio"].forEach((field) => {
+      if (req.body[field] !== undefined) user[field] = req.body[field];
+    });
+
+    if (req.file) {
+      user.profile = req.file.path;
+    }
+
+    await user.save({ validateBeforeSave: false });
+
+    const updatedUser = await User.findById(user._id).select(
+      "-password -verificationCode -resetPasswordOTP -resetPasswordExpires",
+    );
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      user: updatedUser,
+    });
+  } catch (err) {
+    console.error("Update Student Profile Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 exports.getPublicTutors = async (req, res) => {
   try {
     const tutors = await User.find({
