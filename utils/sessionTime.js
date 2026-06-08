@@ -8,6 +8,8 @@ const DAYS = [
   "Saturday",
 ];
 
+const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Karachi";
+
 const toMinutes = (time = "") => {
   const [hours, minutes] = String(time).split(":").map(Number);
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
@@ -28,6 +30,26 @@ const formatTime12 = (time = "") => {
 
 const formatTimeRange12 = (from, to) => `${formatTime12(from)} - ${formatTime12(to)}`;
 
+const getZonedNow = (now = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+  }).formatToParts(now);
+
+  const value = (type) => parts.find((part) => part.type === type)?.value;
+
+  return {
+    day: value("weekday"),
+    minutes: Number(value("hour")) * 60 + Number(value("minute")),
+    seconds: Number(value("second")) || 0,
+  };
+};
+
 const getBookingWindowStatus = (booking, now = new Date()) => {
   const startMinutes = toMinutes(booking.from);
   const endMinutes = toMinutes(booking.to);
@@ -36,7 +58,8 @@ const getBookingWindowStatus = (booking, now = new Date()) => {
     return { state: "invalid", message: "Booking time is invalid" };
   }
 
-  const currentDay = DAYS[now.getDay()];
+  const zonedNow = getZonedNow(now);
+  const currentDay = zonedNow.day || DAYS[now.getDay()];
   if (booking.day !== currentDay) {
     return {
       state: "early",
@@ -44,7 +67,7 @@ const getBookingWindowStatus = (booking, now = new Date()) => {
     };
   }
 
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = zonedNow.minutes;
   if (currentMinutes < startMinutes) {
     return {
       state: "early",
@@ -61,7 +84,7 @@ const getBookingWindowStatus = (booking, now = new Date()) => {
 
   return {
     state: "open",
-    remainingMs: (endMinutes - currentMinutes) * 60 * 1000 - now.getSeconds() * 1000,
+    remainingMs: (endMinutes - currentMinutes) * 60 * 1000 - zonedNow.seconds * 1000,
   };
 };
 
