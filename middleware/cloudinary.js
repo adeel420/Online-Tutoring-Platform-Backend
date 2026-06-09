@@ -15,17 +15,39 @@ const storage = new CloudinaryStorage({
     let folder = "tutorhub/profiles";
     if (file.fieldname === "cnic") folder = "tutorhub/cnic";
     if (file.fieldname === "experienceLetter") folder = "tutorhub/experience";
+    if (file.fieldname === "attachment") folder = "tutorhub/chat";
 
-    const isPdf = file.mimetype === "application/pdf";
+    const isImage = file.mimetype?.startsWith("image/");
+    const isVideo = file.mimetype?.startsWith("video/");
+    const isAttachment = file.fieldname === "attachment";
     return {
       folder,
-      allowed_formats: ["jpg", "jpeg", "png", "pdf"],
-      resource_type: isPdf ? "raw" : "image",
-      format: isPdf ? "pdf" : undefined,
+      allowed_formats: isAttachment
+        ? [
+            "jpg",
+            "jpeg",
+            "png",
+            "webp",
+            "pdf",
+            "mp4",
+            "mov",
+            "webm",
+            "doc",
+            "docx",
+            "ppt",
+            "pptx",
+            "xls",
+            "xlsx",
+          ]
+        : ["jpg", "jpeg", "png", "pdf"],
+      resource_type: isImage ? "image" : isVideo && isAttachment ? "video" : "raw",
     };
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 module.exports = { upload, cloudinary };

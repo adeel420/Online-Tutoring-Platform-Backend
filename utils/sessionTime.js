@@ -34,6 +34,9 @@ const getZonedNow = (now = new Date()) => {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: APP_TIME_ZONE,
     weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -45,10 +48,19 @@ const getZonedNow = (now = new Date()) => {
 
   return {
     day: value("weekday"),
+    date: `${value("year")}-${value("month")}-${value("day")}`,
     minutes: Number(value("hour")) * 60 + Number(value("minute")),
     seconds: Number(value("second")) || 0,
   };
 };
+
+const getDayFromDate = (date = "") => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return "";
+  const [year, month, day] = String(date).split("-").map(Number);
+  return DAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+};
+
+const getTodayDate = (now = new Date()) => getZonedNow(now).date;
 
 const getBookingWindowStatus = (booking, now = new Date()) => {
   const startMinutes = toMinutes(booking.from);
@@ -60,7 +72,14 @@ const getBookingWindowStatus = (booking, now = new Date()) => {
 
   const zonedNow = getZonedNow(now);
   const currentDay = zonedNow.day || DAYS[now.getDay()];
-  if (booking.day !== currentDay) {
+  if (booking.date && booking.date !== zonedNow.date) {
+    return {
+      state: booking.date < zonedNow.date ? "expired" : "early",
+      message: `This class can only start on ${booking.date} at ${formatTime12(booking.from)}.`,
+    };
+  }
+
+  if (!booking.date && booking.day !== currentDay) {
     return {
       state: "early",
       message: `This class can only start on ${booking.day} at ${formatTime12(booking.from)}.`,
@@ -91,5 +110,7 @@ const getBookingWindowStatus = (booking, now = new Date()) => {
 module.exports = {
   formatTime12,
   formatTimeRange12,
+  getDayFromDate,
+  getTodayDate,
   getBookingWindowStatus,
 };

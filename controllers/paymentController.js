@@ -79,6 +79,7 @@ const sendPaymentEmails = async ({ booking, payment, student, tutor }) => {
     studentName: student.name,
     tutorName: tutor.name,
     subject: booking.subject,
+    date: booking.date,
     day: booking.day,
     from: booking.from,
     to: booking.to,
@@ -214,7 +215,7 @@ exports.getAdminPayments = async (req, res) => {
     const payments = await Payment.find()
       .populate("student", "name email")
       .populate("tutor", "name email")
-      .populate("booking", "subject day from to")
+      .populate("booking", "subject date day from to")
       .sort({ createdAt: -1 });
 
     res.status(200).json(

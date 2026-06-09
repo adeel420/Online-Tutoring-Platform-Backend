@@ -10,8 +10,11 @@ const userRoutes = require("./routes/UserRoutes");
 const paymentRoutes = require("./routes/PaymentRoutes");
 const classSessionRoutes = require("./routes/ClassSessionRoutes");
 const realtimeRoutes = require("./routes/RealtimeRoutes");
+const reviewRoutes = require("./routes/ReviewRoutes");
+const Booking = require("./models/bookingModel");
 const Message = require("./models/messageModel");
 const { createNotification } = require("./utils/notifications");
+const { getBookingWindowStatus } = require("./utils/sessionTime");
 const passport = require("./config/passport");
 const cors = require("cors");
 
@@ -47,6 +50,33 @@ io.on("connection", (socket) => {
     try {
       const { to, text, bookingId, classSessionId } = payload;
       if (!to || !text?.trim()) return;
+      if (!bookingId) {
+        ack?.({ ok: false, error: "You can only chat during the session." });
+        return;
+      }
+
+      const booking = await Booking.findById(bookingId);
+      const isParticipant =
+        booking &&
+        ((String(booking.student) === String(socket.userId) &&
+          String(booking.tutor) === String(to)) ||
+          (String(booking.tutor) === String(socket.userId) &&
+            String(booking.student) === String(to)));
+
+      const canUsePaidSession =
+        booking?.paymentStatus === "paid" &&
+        ["upcoming", "completed"].includes(booking.status);
+
+      if (!isParticipant || !canUsePaidSession) {
+        ack?.({ ok: false, error: "You can only chat during the session." });
+        return;
+      }
+
+      const windowStatus = getBookingWindowStatus(booking);
+      if (windowStatus.state !== "open") {
+        ack?.({ ok: false, error: "You can only chat during the session." });
+        return;
+      }
 
       const message = await Message.create({
         sender: socket.userId,
@@ -87,6 +117,7 @@ app.use("/user", userRoutes);
 app.use("/payment", paymentRoutes);
 app.use("/class-sessions", classSessionRoutes);
 app.use("/realtime", realtimeRoutes);
+app.use("/reviews", reviewRoutes);
 
 server.listen(PORT, () => {
   console.log(`Listening the port ${PORT}`);

@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema({
   available: { type: Boolean, default: true },
   availabilitySlots: [
     {
+      date: { type: String },
       day: { type: String, required: true },
       from: { type: String, required: true },
       to: { type: String, required: true },

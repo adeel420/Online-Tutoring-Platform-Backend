@@ -13,6 +13,7 @@ const bookingSchema = new mongoose.Schema(
       required: true,
     },
     slotId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    date: { type: String },
     day: { type: String, required: true },
     from: { type: String, required: true },
     to: { type: String, required: true },

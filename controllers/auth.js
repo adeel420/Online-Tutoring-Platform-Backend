@@ -1,6 +1,7 @@
 const User = require("../models/userModel");
 const Booking = require("../models/bookingModel");
 const Payment = require("../models/paymentModel");
+const Review = require("../models/reviewModel");
 const {
   sendVerificationCode,
   welcomeCode,
@@ -11,14 +12,16 @@ const {
 } = require("../middleware/email");
 const { generateToken } = require("../middleware/jwt");
 const { createJazzCashPayload } = require("./paymentController");
-const { formatTimeRange12 } = require("../utils/sessionTime");
+const { formatTimeRange12, getDayFromDate, getTodayDate } = require("../utils/sessionTime");
 
 const parseAmount = (rate = "") => {
   const amount = Number(String(rate).replace(/[^0-9.]/g, ""));
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
 };
 
-const formatBooking = (booking) => ({
+const isDateString = (date = "") => /^\d{4}-\d{2}-\d{2}$/.test(String(date));
+
+const formatBooking = (booking, reviewMap = new Map()) => ({
   id: booking._id,
   studentId: booking.student?._id,
   student: booking.student?.name || "Student",
@@ -27,7 +30,7 @@ const formatBooking = (booking) => ({
   tutor: booking.tutor?.name || "Tutor",
   tutorEmail: booking.tutor?.email,
   subject: booking.subject,
-  date: booking.day,
+  date: booking.date || booking.day,
   day: booking.day,
   time: formatTimeRange12(booking.from, booking.to),
   from: booking.from,
@@ -39,6 +42,7 @@ const formatBooking = (booking) => ({
   paymentStatus: booking.paymentStatus,
   paymentMethod: booking.paymentMethod,
   paymentReference: booking.paymentReference,
+  review: reviewMap.get(String(booking.tutor?._id || booking.tutor)) || null,
   createdAt: booking.createdAt,
 });
 
@@ -433,12 +437,39 @@ exports.getPublicTutors = async (req, res) => {
       .select(publicTutorSelect)
       .sort({ updatedAt: -1 });
 
+    const today = getTodayDate();
     const publicTutors = tutors.map((tutor) => {
       const tutorObject = tutor.toObject();
       tutorObject.availabilitySlots = (tutorObject.availabilitySlots || []).filter(
-        (slot) => !slot.isBooked,
+        (slot) => !slot.isBooked && slot.date && slot.date >= today,
       );
       return tutorObject;
+    });
+
+    const tutorIds = publicTutors.map((tutor) => tutor._id);
+    const reviews = await Review.find({ tutor: { $in: tutorIds } })
+      .populate("student", "name")
+      .sort({ createdAt: -1 });
+    const reviewsByTutor = reviews.reduce((acc, review) => {
+      const tutorId = String(review.tutor);
+      if (!acc.has(tutorId)) acc.set(tutorId, []);
+      acc.get(tutorId).push(review);
+      return acc;
+    }, new Map());
+
+    publicTutors.forEach((tutor) => {
+      const tutorReviews = reviewsByTutor.get(String(tutor._id)) || [];
+      const ratingTotal = tutorReviews.reduce((sum, review) => sum + review.rating, 0);
+      const averageRating = tutorReviews.length ? ratingTotal / tutorReviews.length : 0;
+      tutor.rating = Number(averageRating.toFixed(1));
+      tutor.ratingCount = tutorReviews.length;
+      tutor.reviews = tutorReviews.map((review) => ({
+        id: review._id,
+        student: review.student?.name || "Student",
+        rating: review.rating,
+        text: review.review,
+        date: review.createdAt,
+      }));
     });
 
     res.status(200).json(publicTutors);
@@ -460,15 +491,18 @@ exports.updateTutorAvailability = async (req, res) => {
       return res.status(400).json({ error: "Slots must be an array" });
     }
 
+    const today = getTodayDate();
     user.availabilitySlots = req.body.slots
-      .filter((slot) => slot.day && slot.from && slot.to)
+      .filter((slot) => isDateString(slot.date) && slot.from && slot.to)
       .map((slot) => ({
         _id: slot._id,
-        day: slot.day,
+        date: slot.date,
+        day: getDayFromDate(slot.date) || slot.day,
         from: slot.from,
         to: slot.to,
         isBooked: slot.isBooked === true,
-      }));
+      }))
+      .filter((slot) => slot.date >= today);
 
     await user.save({ validateBeforeSave: false });
 
@@ -502,6 +536,10 @@ exports.bookTutorSlot = async (req, res) => {
 
     const slot = tutor.availabilitySlots.id(slotId);
     if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (!slot.date) return res.status(400).json({ error: "Slot date is required" });
+    if (slot.date < getTodayDate()) {
+      return res.status(400).json({ error: "This slot date has passed" });
+    }
     if (slot.isBooked) return res.status(400).json({ error: "This slot is already booked" });
 
     const amount = parseAmount(tutor.rate);
@@ -513,6 +551,7 @@ exports.bookTutorSlot = async (req, res) => {
       student: student._id,
       tutor: tutor._id,
       slotId: slot._id,
+      date: slot.date,
       day: slot.day,
       from: slot.from,
       to: slot.to,
@@ -574,7 +613,20 @@ exports.getMyBookings = async (req, res) => {
       .populate("tutor", "name email")
       .sort({ createdAt: -1 });
 
-    res.status(200).json(bookings.map(formatBooking));
+    let reviewMap = new Map();
+    if (user.role === "student") {
+      const reviews = await Review.find({ student: user._id });
+      reviewMap = reviews.reduce((acc, review) => {
+        acc.set(String(review.tutor), {
+          id: review._id,
+          rating: review.rating,
+          review: review.review,
+        });
+        return acc;
+      }, new Map());
+    }
+
+    res.status(200).json(bookings.map((booking) => formatBooking(booking, reviewMap)));
   } catch (err) {
     console.error("Get My Bookings Error:", err);
     res.status(500).json({ error: "Internal server error" });
