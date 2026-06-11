@@ -11,6 +11,8 @@ const paymentRoutes = require("./routes/PaymentRoutes");
 const classSessionRoutes = require("./routes/ClassSessionRoutes");
 const realtimeRoutes = require("./routes/RealtimeRoutes");
 const reviewRoutes = require("./routes/ReviewRoutes");
+const complaintRoutes = require("./routes/ComplaintRoutes");
+const contactRoutes = require("./routes/ContactRoutes");
 const Booking = require("./models/bookingModel");
 const Message = require("./models/messageModel");
 const { createNotification } = require("./utils/notifications");
@@ -118,6 +120,8 @@ app.use("/payment", paymentRoutes);
 app.use("/class-sessions", classSessionRoutes);
 app.use("/realtime", realtimeRoutes);
 app.use("/reviews", reviewRoutes);
+app.use("/complaints", complaintRoutes);
+app.use("/contact", contactRoutes);
 
 server.listen(PORT, () => {
   console.log(`Listening the port ${PORT}`);

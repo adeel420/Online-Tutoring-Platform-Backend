@@ -136,6 +136,101 @@ const sendAdminPaymentEmail = async (booking) => {
   });
 };
 
+const complaintHtml = ({ heading, message, details }) => `
+  <div style="font-family:Arial,sans-serif;background:#f6f7fb;padding:24px">
+    <div style="max-width:620px;margin:auto;background:#fff;border-radius:14px;padding:24px;border:1px solid #eee">
+      <h2 style="margin:0 0 12px;color:#4c1d95">${heading}</h2>
+      <p style="color:#444;line-height:1.6">${message}</p>
+      ${
+        details
+          ? `<div style="background:#f5f3ff;border-radius:12px;padding:16px;margin-top:18px">
+              ${details}
+            </div>`
+          : ""
+      }
+      <p style="font-size:12px;color:#777;margin-top:20px">TutorHub</p>
+    </div>
+  </div>
+`;
+
+const sendComplaintConfirmationEmail = async (email, complaint) => {
+  await transporter.sendMail({
+    from: FROM,
+    to: email,
+    subject: "Your complaint has been submitted",
+    html: complaintHtml({
+      heading: "Complaint submitted",
+      message: `You submitted a complaint against ${complaint.againstName}. Our admin team will review it.`,
+      details: `
+        <p><b>Against:</b> ${complaint.againstName} (${complaint.againstRole})</p>
+        <p><b>Subject:</b> ${complaint.subject}</p>
+        <p><b>Details:</b> ${complaint.message}</p>
+      `,
+    }),
+  });
+};
+
+const sendAdminComplaintEmail = async (complaint) => {
+  if (!ADMIN_EMAIL) return;
+
+  await transporter.sendMail({
+    from: FROM,
+    to: ADMIN_EMAIL,
+    subject: `New complaint: ${complaint.subject}`,
+    html: complaintHtml({
+      heading: "New complaint received",
+      message: "A new complaint has been submitted on TutorHub.",
+      details: `
+        <p><b>From:</b> ${complaint.complainantName} (${complaint.complainantRole}) - ${complaint.complainantEmail}</p>
+        <p><b>Against:</b> ${complaint.againstName} (${complaint.againstRole}) - ${complaint.againstEmail}</p>
+        <p><b>Subject:</b> ${complaint.subject}</p>
+        <p><b>Details:</b> ${complaint.message}</p>
+      `,
+    }),
+  });
+};
+
+const sendComplaintNoticeEmail = async (email, complaint) => {
+  await transporter.sendMail({
+    from: FROM,
+    to: email,
+    subject: "A complaint has been filed about your account",
+    html: complaintHtml({
+      heading: "Complaint notice",
+      message:
+        "A complaint has been filed about your TutorHub account. For privacy, the complainant's identity is not shared. Admin will review the complaint and contact you if needed.",
+      details: `<p><b>Subject:</b> ${complaint.subject}</p>`,
+    }),
+  });
+};
+
+const sendContactFormEmail = async ({ name, email, subject, message }) => {
+  if (!ADMIN_EMAIL) return;
+
+  await transporter.sendMail({
+    from: FROM,
+    to: ADMIN_EMAIL,
+    replyTo: email,
+    subject: `Contact form: ${subject}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;background:#f6f7fb;padding:24px">
+        <div style="max-width:620px;margin:auto;background:#fff;border-radius:14px;padding:24px;border:1px solid #eee">
+          <h2 style="margin:0 0 12px;color:#4c1d95">New contact message</h2>
+          <p style="color:#444;line-height:1.6">A visitor submitted the TutorHub contact form.</p>
+          <div style="background:#f5f3ff;border-radius:12px;padding:16px;margin-top:18px">
+            <p><b>Name:</b> ${name}</p>
+            <p><b>Email:</b> ${email}</p>
+            <p><b>Subject:</b> ${subject}</p>
+            <p><b>Message:</b></p>
+            <p style="white-space:pre-line;color:#444">${message}</p>
+          </div>
+          <p style="font-size:12px;color:#777;margin-top:20px">TutorHub</p>
+        </div>
+      </div>
+    `,
+  });
+};
+
 module.exports = {
   sendVerificationCode,
   welcomeCode,
@@ -146,4 +241,8 @@ module.exports = {
   sendStudentPaymentEmail,
   sendTutorPaymentEmail,
   sendAdminPaymentEmail,
+  sendComplaintConfirmationEmail,
+  sendAdminComplaintEmail,
+  sendComplaintNoticeEmail,
+  sendContactFormEmail,
 };
