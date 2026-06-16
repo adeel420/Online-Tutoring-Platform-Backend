@@ -17,11 +17,15 @@ const formatReview = (review) => ({
 exports.createOrUpdateReview = async (req, res) => {
   try {
     const { tutorId } = req.params;
-    const { rating, review = "" } = req.body;
+    const { rating, review = "", bookingId } = req.body;
     const ratingNumber = Number(rating);
 
     if (!Number.isInteger(ratingNumber) || ratingNumber < 1 || ratingNumber > 5) {
       return res.status(400).json({ error: "Rating must be between 1 and 5 stars" });
+    }
+
+    if (!bookingId) {
+      return res.status(400).json({ error: "Booking ID is required" });
     }
 
     const student = await User.findById(req.user.id);
@@ -36,20 +40,21 @@ exports.createOrUpdateReview = async (req, res) => {
     }
 
     const completedBooking = await Booking.findOne({
+      _id: bookingId,
       student: student._id,
       tutor: tutor._id,
       paymentStatus: "paid",
       status: "completed",
-    }).sort({ updatedAt: -1 });
+    });
 
     if (!completedBooking) {
       return res.status(403).json({
-        error: "You can review this teacher after completing at least one session.",
+        error: "You can review this session only after it is completed and paid.",
       });
     }
 
     const savedReview = await Review.findOneAndUpdate(
-      { student: student._id, tutor: tutor._id },
+      { student: student._id, booking: completedBooking._id },
       {
         student: student._id,
         tutor: tutor._id,
@@ -68,9 +73,6 @@ exports.createOrUpdateReview = async (req, res) => {
     });
   } catch (err) {
     console.error("Save Review Error:", err);
-    if (err.code === 11000) {
-      return res.status(409).json({ error: "You have already reviewed this teacher" });
-    }
     res.status(500).json({ error: "Could not save review" });
   }
 };

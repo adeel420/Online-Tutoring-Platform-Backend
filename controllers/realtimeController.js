@@ -246,6 +246,104 @@ exports.getMaterials = async (req, res) => {
   }
 };
 
+exports.uploadMaterial = async (req, res) => {
+  try {
+    const tutorId = req.user.id;
+    const tutor = await User.findById(tutorId).select("role");
+    if (!tutor || tutor.role !== "tutor") {
+      return res.status(403).json({ error: "Only tutors can upload materials" });
+    }
+
+    if (!req.file) return res.status(400).json({ error: "Please select a file" });
+
+    const { bookingId } = req.body;
+    if (!bookingId) return res.status(400).json({ error: "Booking is required" });
+
+    const booking = await Booking.findById(bookingId);
+    const isOwner =
+      booking &&
+      String(booking.tutor) === String(tutorId) &&
+      booking.paymentStatus === "paid" &&
+      ["upcoming", "completed"].includes(booking.status);
+
+    if (!isOwner) return res.status(403).json({ error: "Booking not found or not accessible" });
+
+    const windowStatus = getBookingWindowStatus(booking);
+    if (windowStatus.state !== "open") {
+      return res.status(403).json({ error: "You can only upload materials during the session window" });
+    }
+
+    const message = await Message.create({
+      sender: tutorId,
+      receiver: booking.student,
+      booking: booking._id,
+      text: "",
+      attachment: {
+        url: req.file.path,
+        name: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        resourceType: req.file.mimetype?.startsWith("image/") ? "image" : "raw",
+      },
+      readBy: [tutorId],
+    });
+
+    const populated = await Message.findById(message._id)
+      .populate("sender", "name role")
+      .populate("receiver", "name role")
+      .populate("booking", "subject");
+
+    const io = req.app.get("io");
+    io?.to(String(booking.student)).emit("chat:message", populated);
+    await createNotification(io, {
+      user: booking.student,
+      tab: "messages",
+      title: "New material shared",
+      body: req.file.originalname,
+      refId: message._id,
+    });
+
+    res.status(201).json({ material: formatMaterial(populated) });
+  } catch (err) {
+    console.error("Upload Material Error:", err);
+    res.status(500).json({ error: "Could not upload material" });
+  }
+};
+
+exports.getActiveSessions = async (req, res) => {
+  try {
+    const tutorId = req.user.id;
+    const tutor = await User.findById(tutorId).select("role");
+    if (!tutor || tutor.role !== "tutor") {
+      return res.status(403).json({ error: "Only tutors can access this" });
+    }
+
+    const bookings = await Booking.find({
+      tutor: tutorId,
+      paymentStatus: "paid",
+      status: { $in: ["upcoming", "completed"] },
+    })
+      .populate("student", "name")
+      .sort({ date: 1, from: 1 });
+
+    const active = bookings
+      .filter((b) => getBookingWindowStatus(b).state === "open")
+      .map((b) => ({
+        id: b._id,
+        student: b.student?.name || "Student",
+        subject: b.subject,
+        date: b.date,
+        from: b.from,
+        to: b.to,
+      }));
+
+    res.status(200).json(active);
+  } catch (err) {
+    console.error("Get Active Sessions Error:", err);
+    res.status(500).json({ error: "Could not load active sessions" });
+  }
+};
+
 exports.getNotifications = async (req, res) => {
   try {
     const notifications = await Notification.find({ user: req.user.id })

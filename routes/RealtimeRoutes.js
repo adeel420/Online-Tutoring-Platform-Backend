@@ -6,6 +6,8 @@ const {
   getNotifications,
   markTabSeen,
   uploadMessageAttachment,
+  uploadMaterial,
+  getActiveSessions,
 } = require("../controllers/realtimeController");
 const { jwtAuthMiddleware } = require("../middleware/jwt");
 const { upload } = require("../middleware/cloudinary");
@@ -20,6 +22,13 @@ router.post(
   jwtAuthMiddleware,
   upload.single("attachment"),
   uploadMessageAttachment,
+);
+router.get("/active-sessions", jwtAuthMiddleware, getActiveSessions);
+router.post(
+  "/materials",
+  jwtAuthMiddleware,
+  upload.single("attachment"),
+  uploadMaterial,
 );
 router.get("/notifications", jwtAuthMiddleware, getNotifications);
 router.put("/notifications/:tab/seen", jwtAuthMiddleware, markTabSeen);
