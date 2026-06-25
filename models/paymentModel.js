@@ -6,7 +6,7 @@ const paymentSchema = new mongoose.Schema(
     student: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     tutor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     amount: { type: Number, required: true },
-    method: { type: String, default: "JazzCash" },
+    method: { type: String, default: "EasyPaisa" },
     status: {
       type: String,
       enum: ["pending", "paid", "failed"],
@@ -15,6 +15,12 @@ const paymentSchema = new mongoose.Schema(
     transactionRef: { type: String, unique: true, required: true },
     gatewayResponse: { type: Object },
     paidAt: { type: Date },
+    tutorPayoutStatus: {
+      type: String,
+      enum: ["unpaid", "paid"],
+      default: "unpaid",
+    },
+    tutorPaidAt: { type: Date },
   },
   { timestamps: true },
 );

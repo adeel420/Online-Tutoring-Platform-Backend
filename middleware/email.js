@@ -102,7 +102,7 @@ const sendStudentPaymentEmail = async (email, booking) => {
     subject: "Payment received by TutorHub",
     html: paymentHtml({
       heading: "Payment received",
-      message: "Your JazzCash payment has been received by TutorHub admin. Your session is now booked.",
+      message: "Your EasyPaisa payment has been received by TutorHub admin. Your session is now booked.",
       booking,
     }),
   });

@@ -11,7 +11,7 @@ const {
   sendTeacherRejectedEmail,
 } = require("../middleware/email");
 const { generateToken } = require("../middleware/jwt");
-const { createJazzCashPayload } = require("./paymentController");
+const { createEasyPaisaPayload } = require("./paymentController");
 const { formatTimeRange12, getDayFromDate, getTodayDate } = require("../utils/sessionTime");
 
 const parseAmount = (rate = "") => {
@@ -567,20 +567,20 @@ exports.bookTutorSlot = async (req, res) => {
       student: student._id,
       tutor: tutor._id,
       amount,
-      method: "JazzCash",
+      method: "EasyPaisa",
       status: "pending",
       transactionRef: `T${Date.now()}${String(student._id).slice(-4)}`,
     });
 
-    const jazzCash = {
+    const easyPaisa = {
       actionUrl:
-        process.env.JAZZCASH_POST_URL ||
-        "https://sandbox.jazzcash.com.pk/CustomerPortal/transactionmanagement/merchantform",
-      payload: createJazzCashPayload({ booking, payment, student }),
+        process.env.EASYPAISA_POST_URL ||
+        "https://sandbox.easypaisa.com.pk/CustomerPortal/transactionmanagement/merchantform",
+      payload: createEasyPaisaPayload({ booking, payment, student }),
       configured: Boolean(
-        process.env.JAZZCASH_MERCHANT_ID &&
-          process.env.JAZZCASH_PASSWORD &&
-          (process.env.JAZZCASH_INTEGERITY_SALT || process.env.JAZZCASH_INTEGRITY_SALT),
+        process.env.EASYPAISA_MERCHANT_ID &&
+          process.env.EASYPAISA_PASSWORD &&
+          process.env.EASYPAISA_INTEGRITY_SALT,
       ),
     };
 
@@ -588,7 +588,7 @@ exports.bookTutorSlot = async (req, res) => {
       message: "Booking created. Please complete payment.",
       booking,
       payment,
-      jazzCash,
+      easyPaisa,
     });
   } catch (err) {
     console.error("Book Tutor Slot Error:", err);
@@ -626,7 +626,30 @@ exports.getMyBookings = async (req, res) => {
       }, new Map());
     }
 
-    res.status(200).json(bookings.map((booking) => formatBooking(booking, reviewMap)));
+    let tutorPayoutMap = new Map();
+    if (user.role === "tutor") {
+      const payments = await Payment.find({
+        tutor: user._id,
+        booking: { $in: bookings.map((b) => b._id) },
+      }).select("booking tutorPayoutStatus tutorPaidAt");
+      tutorPayoutMap = payments.reduce((acc, p) => {
+        acc.set(String(p.booking), {
+          tutorPayoutStatus: p.tutorPayoutStatus,
+          tutorPaidAt: p.tutorPaidAt,
+        });
+        return acc;
+      }, new Map());
+    }
+
+    res.status(200).json(
+      bookings.map((booking) => {
+        const payout = tutorPayoutMap.get(String(booking._id)) || {};
+        return {
+          ...formatBooking(booking, reviewMap),
+          ...payout,
+        };
+      }),
+    );
   } catch (err) {
     console.error("Get My Bookings Error:", err);
     res.status(500).json({ error: "Internal server error" });

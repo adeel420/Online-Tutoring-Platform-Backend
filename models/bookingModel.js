@@ -25,7 +25,7 @@ const bookingSchema = new mongoose.Schema(
       enum: ["pending", "paid", "failed"],
       default: "pending",
     },
-    paymentMethod: { type: String, default: "JazzCash" },
+    paymentMethod: { type: String, default: "EasyPaisa" },
     paymentReference: { type: String },
     paidAt: { type: Date },
     status: {
