@@ -15,6 +15,7 @@ const complaintRoutes = require("./routes/ComplaintRoutes");
 const contactRoutes = require("./routes/ContactRoutes");
 const Booking = require("./models/bookingModel");
 const Message = require("./models/messageModel");
+const ClassSession = require("./models/classSessionModel");
 const { createNotification } = require("./utils/notifications");
 const { getBookingWindowStatus } = require("./utils/sessionTime");
 const passport = require("./config/passport");
@@ -74,10 +75,16 @@ io.on("connection", (socket) => {
         return;
       }
 
-      const windowStatus = getBookingWindowStatus(booking);
-      if (windowStatus.state !== "open") {
-        ack?.({ ok: false, error: "You can only chat during the session." });
-        return;
+      const activeSession = await ClassSession.findOne({
+        booking: bookingId,
+        status: { $in: ["live", "waiting"] },
+      });
+      if (!activeSession) {
+        const windowStatus = getBookingWindowStatus(booking);
+        if (windowStatus.state !== "open") {
+          ack?.({ ok: false, error: "You can only chat during the session." });
+          return;
+        }
       }
 
       const message = await Message.create({
@@ -122,7 +129,6 @@ app.use("/realtime", realtimeRoutes);
 app.use("/reviews", reviewRoutes);
 app.use("/complaints", complaintRoutes);
 app.use("/contact", contactRoutes);
-
 server.listen(PORT, () => {
   console.log(`Listening the port ${PORT}`);
 });

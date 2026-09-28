@@ -67,7 +67,7 @@ exports.createOrGetClassSession = async (req, res) => {
     if (booking.paymentStatus !== "paid" || booking.status === "pending_payment") {
       return res.status(400).json({ error: "Payment is required before class starts" });
     }
-    if (booking.status === "completed" || booking.status === "cancelled") {
+    if (booking.status === "cancelled") {
       return res.status(400).json({ error: "This class is no longer available" });
     }
 
@@ -91,6 +91,16 @@ exports.createOrGetClassSession = async (req, res) => {
       },
       { new: true, upsert: true, setDefaultsOnInsert: true },
     );
+
+    if (session.status === "ended") {
+      await ClassSession.updateOne(
+        { _id: session._id },
+        {
+          $set: { status: "waiting", candidates: [] },
+          $unset: { offer: "", answer: "", startedAt: "", endedAt: "" },
+        },
+      );
+    }
 
     const populated = await populateSession(ClassSession.findById(session._id));
     res.status(200).json(populated);
@@ -264,17 +274,17 @@ exports.endClassSession = async (req, res) => {
     );
     if (error) return res.status(error.status).json({ error: error.message });
 
-    session.status = "ended";
-    session.endedAt = new Date();
     const updatedSession = await ClassSession.findByIdAndUpdate(
       session._id,
-      { $set: { status: "ended", endedAt: session.endedAt } },
+      {
+        $set: { status: "ended", endedAt: new Date(), candidates: [] },
+        $unset: { offer: "", answer: "" },
+      },
       { new: true, runValidators: true },
     );
     if (!updatedSession) {
       return res.status(404).json({ error: "Class session not found" });
     }
-    await completeBooking(session.booking);
 
     const receiver =
       String(session.student) === String(req.user.id) ? session.tutor : session.student;

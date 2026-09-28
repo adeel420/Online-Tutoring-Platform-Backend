@@ -1,5 +1,6 @@
 const Booking = require("../models/bookingModel");
 const Message = require("../models/messageModel");
+const ClassSession = require("../models/classSessionModel");
 const Notification = require("../models/notificationModel");
 const User = require("../models/userModel");
 const { formatTimeRange12, getBookingWindowStatus } = require("../utils/sessionTime");
@@ -69,7 +70,7 @@ const formatMaterial = (message) => ({
   uploaded: message.createdAt,
 });
 
-const validateChatBooking = async ({ bookingId, senderId, receiverId }) => {
+const validateChatBooking = async ({ bookingId, senderId, receiverId, classSessionId }) => {
   if (!bookingId) return { error: SESSION_CHAT_MESSAGE };
 
   const booking = await Booking.findById(bookingId);
@@ -86,9 +87,15 @@ const validateChatBooking = async ({ bookingId, senderId, receiverId }) => {
     return { error: SESSION_CHAT_MESSAGE };
   }
 
-  const windowStatus = getBookingWindowStatus(booking);
-  if (windowStatus.state !== "open") {
-    return { error: SESSION_CHAT_MESSAGE };
+  const activeSession = await ClassSession.findOne({
+    booking: bookingId,
+    status: { $in: ["live", "waiting"] },
+  });
+  if (!activeSession) {
+    const windowStatus = getBookingWindowStatus(booking);
+    if (windowStatus.state !== "open") {
+      return { error: SESSION_CHAT_MESSAGE };
+    }
   }
 
   return { booking };
@@ -169,6 +176,7 @@ exports.uploadMessageAttachment = async (req, res) => {
       bookingId,
       senderId: req.user.id,
       receiverId: peerId,
+      classSessionId,
     });
     if (error) return res.status(403).json({ error });
 

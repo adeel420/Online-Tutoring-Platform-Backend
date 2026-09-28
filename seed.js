@@ -80,7 +80,7 @@ const bookingSchema = new mongoose.Schema(
       enum: ["pending", "paid", "failed"],
       default: "pending",
     },
-    paymentMethod: { type: String, default: "EasyPaisa" },
+    paymentMethod: { type: String, default: "Stripe" },
     paymentReference: String,
     paidAt: Date,
     status: {
@@ -98,7 +98,7 @@ const paymentSchema = new mongoose.Schema(
     student: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     tutor: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     amount: Number,
-    method: { type: String, default: "EasyPaisa" },
+    method: { type: String, default: "Stripe" },
     status: {
       type: String,
       enum: ["pending", "paid", "failed"],
@@ -270,6 +270,131 @@ async function seedDatabase() {
           { day: "Monday", from: "14:00", to: "15:00", isBooked: false },
           { day: "Wednesday", from: "10:00", to: "11:00", isBooked: false },
           { day: "Friday", from: "15:00", to: "16:00", isBooked: false },
+        ],
+      },
+      {
+        name: "Ahmed Hassan",
+        email: "ahmed.computer@gmail.com",
+        phone: "03011111111",
+        subject: "Computer Science",
+        experience: "4 years",
+        rate: "1800",
+        qualification: "BS Computer Science - UET",
+        bio: "Experienced Computer Science tutor for Programming, Database and Web Development.",
+        location: "Lahore",
+        tags: [
+          "Computer Science",
+          "Programming",
+          "Database",
+          "Web Development",
+        ],
+        isApproved: true,
+        cnic: "35202-1111111-1",
+        bankDetails: {
+          bankName: "Meezan Bank",
+          accountTitle: "Ahmed Hassan",
+          accountNumber: "12345678901",
+          iban: "PK36MEZN00012345678901",
+        },
+        availabilitySlots: [
+          { day: "Monday", from: "10:00", to: "11:00", isBooked: false },
+          { day: "Wednesday", from: "14:00", to: "15:00", isBooked: false },
+        ],
+      },
+      {
+        name: "Ayesha Noor",
+        email: "ayesha.biology@gmail.com",
+        phone: "03022222222",
+        subject: "Biology",
+        experience: "5 years",
+        rate: "1500",
+        qualification: "MSc Biology - PU",
+        bio: "Biology tutor for Matric, FSC and MDCAT students.",
+        location: "Lahore",
+        tags: ["Biology", "Botany", "Zoology", "MDCAT"],
+        isApproved: true,
+        cnic: "35202-2222222-2",
+        bankDetails: {
+          bankName: "HBL",
+          accountTitle: "Ayesha Noor",
+          accountNumber: "22345678901",
+          iban: "PK06HABB00022345678901",
+        },
+        availabilitySlots: [
+          { day: "Tuesday", from: "09:00", to: "10:00", isBooked: false },
+          { day: "Thursday", from: "13:00", to: "14:00", isBooked: false },
+        ],
+      },
+      {
+        name: "Bilal Ahmed",
+        email: "bilal.chemistry@gmail.com",
+        phone: "03033333333",
+        subject: "Chemistry",
+        experience: "6 years",
+        rate: "1600",
+        qualification: "MSc Chemistry - GCU",
+        bio: "Chemistry expert for FSC and Entry Test preparation.",
+        location: "Faisalabad",
+        tags: ["Chemistry", "Organic", "Inorganic", "MDCAT"],
+        isApproved: true,
+        cnic: "35202-3333333-3",
+        bankDetails: {
+          bankName: "UBL",
+          accountTitle: "Bilal Ahmed",
+          accountNumber: "32345678901",
+          iban: "PK24UNIL0032345678901",
+        },
+        availabilitySlots: [
+          { day: "Monday", from: "15:00", to: "16:00", isBooked: false },
+          { day: "Friday", from: "11:00", to: "12:00", isBooked: false },
+        ],
+      },
+      {
+        name: "Hina Fatima",
+        email: "hina.urdu@gmail.com",
+        phone: "03044444444",
+        subject: "Urdu",
+        experience: "8 years",
+        rate: "1000",
+        qualification: "MA Urdu - PU",
+        bio: "Professional Urdu language and literature teacher.",
+        location: "Multan",
+        tags: ["Urdu", "Grammar", "Literature", "Essay Writing"],
+        isApproved: true,
+        cnic: "35202-4444444-4",
+        bankDetails: {
+          bankName: "Allied Bank",
+          accountTitle: "Hina Fatima",
+          accountNumber: "42345678901",
+          iban: "PK78ABPA0042345678901",
+        },
+        availabilitySlots: [
+          { day: "Wednesday", from: "10:00", to: "11:00", isBooked: false },
+          { day: "Saturday", from: "12:00", to: "13:00", isBooked: false },
+        ],
+      },
+      {
+        name: "Hamza Malik",
+        email: "hamza.economics@gmail.com",
+        phone: "03055555555",
+        subject: "Economics",
+        experience: "5 years",
+        rate: "1400",
+        qualification: "MS Economics - LUMS",
+        bio: "Economics tutor for Intermediate, BBA and BS students.",
+        location: "Islamabad",
+        tags: ["Economics", "Microeconomics", "Macroeconomics", "Statistics"],
+        isApproved: true,
+        cnic: "35202-5555555-5",
+        bankDetails: {
+          bankName: "Bank Alfalah",
+          accountTitle: "Hamza Malik",
+          accountNumber: "52345678901",
+          iban: "PK12ALFH0052345678901",
+        },
+        availabilitySlots: [
+          { day: "Tuesday", from: "14:00", to: "15:00", isBooked: false },
+          { day: "Thursday", from: "16:00", to: "17:00", isBooked: false },
         ],
       },
       {
@@ -458,7 +583,7 @@ async function seedDatabase() {
         student: students[0]._id,
         tutor: tutors[0]._id,
         amount: 1500,
-        method: "EasyPaisa",
+        method: "Stripe",
         status: "paid",
         transactionRef: "EP-2026-001",
         gatewayResponse: { code: "000", message: "SUCCESS" },
@@ -469,7 +594,7 @@ async function seedDatabase() {
         student: students[1]._id,
         tutor: tutors[1]._id,
         amount: 1200,
-        method: "EasyPaisa",
+        method: "Stripe",
         status: "paid",
         transactionRef: "EP-2026-002",
         gatewayResponse: { code: "000", message: "SUCCESS" },
@@ -622,9 +747,10 @@ async function seedDatabase() {
     console.log("📋 LOGIN CREDENTIALS (password: Test1234!)");
     console.log("=".repeat(50));
     console.log("👤 ADMIN:    admin@tutorconnect.com");
-    console.log("📚 TUTORS:   ali.tutor@gmail.com");
-    console.log("             sara.tutor@gmail.com");
-    console.log("             usman.tutor@gmail.com");
+    console.log("📚 TUTORS:");
+    tutors.forEach((t) => {
+      console.log(`             ${t.email}`);
+    });
     console.log("🎓 STUDENTS: fatima.student@gmail.com");
     console.log("             hassan.student@gmail.com");
     console.log("             zainab.student@gmail.com");

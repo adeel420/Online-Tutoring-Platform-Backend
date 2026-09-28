@@ -11,7 +11,7 @@ const {
   sendTeacherRejectedEmail,
 } = require("../middleware/email");
 const { generateToken } = require("../middleware/jwt");
-const { createEasyPaisaPayload } = require("./paymentController");
+const { createPaymentIntent } = require("./paymentController");
 const { formatTimeRange12, getDayFromDate, getTodayDate } = require("../utils/sessionTime");
 
 const parseAmount = (rate = "") => {
@@ -567,28 +567,28 @@ exports.bookTutorSlot = async (req, res) => {
       student: student._id,
       tutor: tutor._id,
       amount,
-      method: "EasyPaisa",
+      method: "Stripe",
       status: "pending",
       transactionRef: `T${Date.now()}${String(student._id).slice(-4)}`,
     });
 
-    const easyPaisa = {
-      actionUrl:
-        process.env.EASYPAISA_POST_URL ||
-        "https://sandbox.easypaisa.com.pk/CustomerPortal/transactionmanagement/merchantform",
-      payload: createEasyPaisaPayload({ booking, payment, student }),
-      configured: Boolean(
-        process.env.EASYPAISA_MERCHANT_ID &&
-          process.env.EASYPAISA_PASSWORD &&
-          process.env.EASYPAISA_INTEGRITY_SALT,
-      ),
-    };
+    const stripe = await createPaymentIntent({
+      booking: {
+        ...booking.toObject(),
+        tutorName: tutor.name,
+      },
+      payment,
+      student,
+    });
+
+    payment.transactionRef = stripe.paymentIntentId;
+    await payment.save({ validateBeforeSave: false });
 
     res.status(201).json({
       message: "Booking created. Please complete payment.",
       booking,
       payment,
-      easyPaisa,
+      stripe,
     });
   } catch (err) {
     console.error("Book Tutor Slot Error:", err);

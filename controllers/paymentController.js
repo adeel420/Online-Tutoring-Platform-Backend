@@ -1,4 +1,4 @@
-const crypto = require("crypto");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Booking = require("../models/bookingModel");
 const Payment = require("../models/paymentModel");
 const User = require("../models/userModel");
@@ -8,70 +8,6 @@ const {
   sendAdminPaymentEmail,
 } = require("../middleware/email");
 const { createNotification } = require("../utils/notifications");
-
-const formatEasyPaisaDate = (date) => {
-  const pad = (value) => String(value).padStart(2, "0");
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate()),
-    pad(date.getHours()),
-    pad(date.getMinutes()),
-    pad(date.getSeconds()),
-  ].join("");
-};
-
-const createEasyPaisaHash = (payload) => {
-  const salt = process.env.EASYPAISA_INTEGRITY_SALT;
-  if (!salt) return "";
-
-  const hashString = Object.keys(payload)
-    .filter(
-      (key) =>
-        key !== "pp_SecureHash" &&
-        payload[key] !== undefined &&
-        payload[key] !== "",
-    )
-    .sort()
-    .map((key) => payload[key])
-    .join("&");
-
-  return crypto
-    .createHmac("sha256", salt)
-    .update(`${salt}&${hashString}`)
-    .digest("hex")
-    .toUpperCase();
-};
-
-const createEasyPaisaPayload = ({ booking, payment, student }) => {
-  const now = new Date();
-  const expiry = new Date(now.getTime() + 60 * 60 * 1000);
-  const payload = {
-    pp_Version: "1.1",
-    pp_TxnType: "MWALLET",
-    pp_Language: "EN",
-    pp_MerchantID: process.env.EASYPAISA_MERCHANT_ID || "",
-    pp_Password: process.env.EASYPAISA_PASSWORD || "",
-    pp_TxnRefNo: payment.transactionRef,
-    pp_Amount: String(Math.round(payment.amount * 100)),
-    pp_TxnCurrency: "PKR",
-    pp_TxnDateTime: formatEasyPaisaDate(now),
-    pp_TxnExpiryDateTime: formatEasyPaisaDate(expiry),
-    pp_BillReference: String(booking._id),
-    pp_Description: `TutorHub session with ${booking.subject || "tutor"}`,
-    pp_ReturnURL:
-      process.env.EASYPAISA_RETURN_URL ||
-      `${process.env.SERVER_URL || "http://localhost:8080"}/payment/easypaisa/return`,
-    ppmpf_1: String(booking._id),
-    ppmpf_2: String(student._id),
-    ppmpf_3: String(booking.tutor),
-    ppmpf_4: "",
-    ppmpf_5: "",
-  };
-
-  payload.pp_SecureHash = createEasyPaisaHash(payload);
-  return payload;
-};
 
 const sendPaymentEmails = async ({ booking, payment, student, tutor }) => {
   const emailData = {
@@ -154,7 +90,52 @@ const markPaymentPaid = async (payment, gatewayResponse = {}) => {
   return payment;
 };
 
-exports.createEasyPaisaPayload = createEasyPaisaPayload;
+const createPaymentIntent = async ({ booking, payment, student }) => {
+  const intent = await stripe.paymentIntents.create({
+    amount: Math.round(payment.amount * 100),
+    currency: "usd",
+    metadata: {
+      bookingId: String(booking._id),
+      paymentId: String(payment._id),
+      studentId: String(student._id),
+      transactionRef: payment.transactionRef,
+    },
+  });
+
+  return {
+    clientSecret: intent.client_secret,
+    paymentIntentId: intent.id,
+    configured: Boolean(process.env.STRIPE_SECRET_KEY),
+  };
+};
+
+exports.createPaymentIntent = createPaymentIntent;
+
+exports.confirmStripePayment = async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const payment = await Payment.findById(paymentId);
+    if (!payment) return res.status(404).json({ error: "Payment not found" });
+
+    if (String(payment.student) !== String(req.user.id)) {
+      return res.status(403).json({ error: "You cannot confirm this payment" });
+    }
+
+    const intent = await stripe.paymentIntents.retrieve(
+      payment.transactionRef,
+    ).catch(() => null);
+
+    if (intent && intent.status === "succeeded") {
+      await markPaymentPaid(payment, intent);
+      return res.status(200).json({ message: "Payment confirmed successfully" });
+    }
+
+    return res.status(400).json({ error: "Payment not yet successful" });
+  } catch (err) {
+    console.error("Confirm Stripe Payment Error:", err);
+    res.status(500).json({ error: err.message || "Internal server error" });
+  }
+};
 
 exports.getTutorPayouts = async (req, res) => {
   try {
@@ -358,36 +339,6 @@ exports.confirmDevPayment = async (req, res) => {
   } catch (err) {
     console.error("Confirm Dev Payment Error:", err);
     res.status(500).json({ error: err.message || "Internal server error" });
-  }
-};
-
-exports.handleEasyPaisaReturn = async (req, res) => {
-  try {
-    const response = { ...req.body, ...req.query };
-    const txnRef = response.pp_TxnRefNo;
-    const responseCode = response.pp_ResponseCode;
-
-    const payment = await Payment.findOne({ transactionRef: txnRef });
-    if (!payment) return res.status(404).send("Payment not found");
-
-    if (responseCode === "000") {
-      await markPaymentPaid(payment, response);
-      return res.redirect(
-        `${process.env.FRONTEND_URL || "http://localhost:5173"}/student_dashboard`,
-      );
-    }
-
-    payment.status = "failed";
-    payment.gatewayResponse = response;
-    await payment.save();
-    await Booking.findByIdAndUpdate(payment.booking, { paymentStatus: "failed" });
-
-    return res.redirect(
-      `${process.env.FRONTEND_URL || "http://localhost:5173"}/tutors?payment=failed`,
-    );
-  } catch (err) {
-    console.error("EasyPaisa Return Error:", err);
-    res.status(500).send("Could not process payment response");
   }
 };
 

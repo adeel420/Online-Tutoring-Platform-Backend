@@ -6,7 +6,7 @@ const paymentSchema = new mongoose.Schema(
     student: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     tutor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     amount: { type: Number, required: true },
-    method: { type: String, default: "EasyPaisa" },
+    method: { type: String, default: "Stripe" },
     status: {
       type: String,
       enum: ["pending", "paid", "failed"],
